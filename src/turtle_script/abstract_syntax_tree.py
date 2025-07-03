@@ -2,7 +2,7 @@ from colorama import Fore
 from anytree import RenderTree, Node
 from itertools import chain
 from grammar import *
-from table_parser_ll1 import LL1Table, LL1ParserTable, Tokenizer
+from table_parser_ll1 import LL1Table, LL1ParserTable, Token, Tokenizer
 
 
 def is_empty(node: Node) -> bool:
@@ -23,27 +23,6 @@ def flatten(items):
     return [item for item in items if item is not None]
 
 
-def process_children(name: object, children: list[Node]) -> Node:
-    """Processa os filhos de um nó e retorna um novo nó com base no número de filhos."""
-    children = flatten(children)
-    if len(children) == 0:
-        return None
-    if len(children) == 1:
-        return children[0]
-    return Node(name, children=children)
-
-
-def process_children_with_op(name: object, children: list[Node], op: Node) -> Node:
-    """
-    Processa os filhos de um nó e retorna um novo nó com base no número de filhos,
-    incluindo um operador específico.
-    """
-    processed_children = process_children(name, children)
-    if processed_children is None:
-        return None
-    return op, processed_children
-
-
 def get_ast_root(derivation_tree_root: Node) -> Node:
     """Obtém a árvore sintática abstrata (AST) a partir da raiz da árvore de derivação."""
     return f_program(derivation_tree_root)
@@ -58,7 +37,7 @@ def f_program(root: Node) -> Node:
         children.append(decs)
     if cmds:
         children.append(cmds)
-    return process_children(name=root.name, children=children)
+    return Node(name=root.name, children=flatten(children))
 
 
 def f_declarations(root: Node) -> list:
@@ -88,11 +67,13 @@ def f_type(root: Node) -> Node:
 
 def f_assign_variable(root: Node) -> Node:
     """Processa a atribuição de variáveis."""
-    op_att, ids, ids_assignment = root.children
+    op_var_def, ids, ids_assignment = root.children
     ids, ids_assignment = f_identifiers(ids), f_identifiers_assignment(ids_assignment)
-    children = [ids, ids_assignment]
-    children = flatten(children)
-    return op_att, children
+    children = [ids]
+    if len(ids_assignment) != 0:
+        children.append(Node(name=op_atribuicao))
+    children.append(ids_assignment)
+    return op_var_def, flatten(children)
 
 
 def f_identifiers(root: Node) -> list:
@@ -193,8 +174,8 @@ def f_else(root: Node) -> Node:
 def f_loop(root: Node) -> Node:
     """Processa um comando de loop (REPETIR ou ENQUANTO)."""
     child = root.children[0]
-    _, expr, _, cmds, _, _ = child.children
-    return Node(child.name, children=flatten([f_expr(expr), f_commands(cmds)]))
+    _op, expr, _, cmds, _, _ = child.children
+    return Node(_op.name, children=flatten([f_expr(expr), f_commands(cmds)]))
 
 
 def f_generic_command(root: Node) -> Node:
@@ -410,7 +391,7 @@ if __name__ == "__main__":
         for pre, fill, node in RenderTree(ast_root):
             print(
                 f"{pre}"
-                + {True: Fore.BLUE, False: Fore.BLACK}[node.is_leaf]
-                + f"{node.name}"
+                + {True: Fore.BLUE, False: Fore.BLACK}[isinstance(node.name, Token)]
+                + f"{node.name.lexeme if isinstance(node.name, Token) else node.name}"
                 + Fore.RESET
             )
